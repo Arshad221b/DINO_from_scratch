@@ -1,9 +1,7 @@
 import torch 
 import torchvision
 import torchvision.transforms as transforms
-from torchvision.datasets import STL10
-
-dataset = STL10(root='./data', split='unlabeled', download=True)
+import torch.nn as nn
 
 class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, root, views = 2, transform_type = 'global'):
@@ -34,21 +32,22 @@ class CustomDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         index = index % len(self.root)
         image, _ = self.root[index]
-        if self.transform_type == "global":  
-            transforms = self.get_global_transforms()
-            image =[transforms(image) for _ in range(self.views)]
+
+        if self.transform_type == "global":
+            transform = self.get_global_transforms()
         elif self.transform_type == "local":
-            transforms = self.get_local_transforms()
-            image = transforms(image)
+            transform = self.get_local_transforms()
+        else:
+            raise ValueError(f"Unknown transform_type: {self.transform_type}")
+        
+        
+
+        image = torch.stack([transform(image) for _ in range(self.views)], dim=0)
         return image
-    
-def dino_collate_function(batch): 
-    crops = list(zip(*batch)) 
-    return [torch.stack(crop) for crop in crops]
+        
+    def ema_update(self, teacher_model, student_model, momentum=0.996):
+        for param_t, param_s in zip(teacher_model.parameters(), student_model.parameters()):
+            if param_t.data.shape == param_s.data.shape:
+                param_t.data = momentum * param_t.data + (1. - momentum) * param_s.data
+        return teacher_model
 
-train_dataset = CustomDataset(dataset, transform_type='global')
-train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True, collate_fn=dino_collate_function)
-
-for i, data in enumerate(train_loader):
-    print(data[0].shape, data[0][0].shape)
-    break
